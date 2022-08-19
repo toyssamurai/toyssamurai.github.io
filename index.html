@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+	<script src="https://cdn.jsdelivr.net/npm/webmidi@next/dist/iife/webmidi.iife.js"></script>
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"
+		integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+	<!-- polyfill -->
+	<script src="./js/shim/Base64.js" type="text/javascript"></script>
+	<script src="./js/shim/Base64binary.js" type="text/javascript"></script>
+	<script src="./js/shim/WebAudioAPI.js" type="text/javascript"></script>
+	<!-- midi.js package -->
+	<script src="./js/midi/audioDetect.js" type="text/javascript"></script>
+	<script src="./js/midi/gm.js" type="text/javascript"></script>
+	<script src="./js/midi/loader.js" type="text/javascript"></script>
+	<script src="./js/midi/plugin.audiotag.js" type="text/javascript"></script>
+	<script src="./js/midi/plugin.webaudio.js" type="text/javascript"></script>
+	<script src="./js/midi/plugin.webmidi.js" type="text/javascript"></script>
+	<!-- utils -->
+	<script src="./js/util/dom_request_xhr.js" type="text/javascript"></script>
+	<script src="./js/util/dom_request_script.js" type="text/javascript"></script>
+	<script src="./js/tuna-min.js" type="text/javascript"></script>
+	<style>
+		html {
+			font-family: sans-serif;
+			font-size: 1.25em;
+		}
+
+		body {
+			padding: 0.5em;
+		}
+
+		select,
+		input,
+		button {
+			font-size: 1em;
+		}
+
+		#chord {
+			margin: 1em 0;
+			padding: 1em;
+			border: 1px dotted #994499;
+			background-color: #ffccff;
+			font-size: 48px;
+			font-weight: bold;
+			text-align: center;
+		}
+
+		#chordName {
+			font-size: 40px;
+			font-weight: bold;
+			text-align: center;
+		}
+
+		#chordNotes {
+			font-size: 16px;
+			text-align: center;
+		}
+
+		#logs {
+			margin: 1em 0;
+			padding: 1em;
+			border: 1px dotted #999944;
+			background-color: #ffffcc;
+		}
+
+		#initialization {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: left;
+			align-items: flex-start;
+			gap: 1em;
+		}
+
+		#initialization fieldset {
+			border: 0;
+			padding: 0;
+			margin: 0 0 1em 0;
+		}
+
+		#initialization fieldset label {
+			display: block;
+			margin: 0 0 0.5em 0;
+		}
+
+		#initialization fieldset.oneliner label {
+			display: inline;
+			margin: 0 0 0.5em 0;
+		}
+
+		#initialization fieldset.full-width {
+			flex-basis: 100%;
+		}
+	</style>
+</head>
+
+<body>
+	<form id="initialization">
+		<fieldset>
+			<label for="midi-input">MIDI Input</label>
+			<select id="midi-input"></select>
+		</fieldset>
+		<fieldset>
+			<label for="midi-output">MIDI Output</label>
+			<select id="midi-output"></select>
+		</fieldset>
+		<fieldset>
+			<label for="midi-output-strum">MIDI Output (Strum)</label>
+			<select id="midi-output-strum"></select>
+		</fieldset>
+		<fieldset>
+			<label for="built-in-instruments">Built-in Instrument</label>
+			<select id="built-in-instruments">
+				<option value="acoustic_guitar_nylon">Acoustic Guitar (Nylon)</option>
+				<option value="electric_guitar_clean">Electric Guitar (Clean)</option>
+			</select>
+		</fieldset>
+		<fieldset class="oneliner">
+			<label for="use-built-in-instrument">Use Built-in Instrument</label>
+			<input type="checkbox" id="use-built-in-instrument" checked>
+		</fieldset>
+		<fieldset class="oneliner">
+			<label for="send-special-notes">Send Special Notes</label>
+			<input type="checkbox" id="send-special-notes">
+		</fieldset>
+		<fieldset class="full-width">
+			<label for="special-notes"><strong>Special Notes</strong></label>
+			<table>
+				<tbody>
+					<tr>
+						<td><label for="muted-note">Muted Note</label></td>
+						<td><input type="number" id="muted-note-trigger" value="126" style="width: 6em;"
+								placeholder="Trigger #"></td>
+						<td><input type="number" id="muted-note" value="91" style="width: 6em;"
+								placeholder="Target #"></td>
+					</tr>
+					<tr>
+						<td><label for="silent-stroke">Silent Stroke</label></td>
+						<td><input type="number" id="silent-stroke-trigger" value="127" style="width: 6em;"
+								placeholder="Trigger #"></td>
+						<td><input type="number" id="silent-stroke" value="92" style="width: 6em;"
+								placeholder="Target #">
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</fieldset>
+		<fieldset class="full-width">
+			<label><strong>Other Settings</strong></label>
+			<table>
+				<tbody>
+					<tr>
+						<td><label for="transpose">Transpose</label></td>
+						<td>
+							<input type="number" id="transpose" value="0" style="width: 6em;" placeholder="0">
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</fieldset>
+		<fieldset class="full-width">
+			<button id="initialize">Initialize</button>
+			<button id="forwarder-toggle">Enable Forwarder</button>
+			<button id="all-channels-toggle">Enable All Channels</button>
+			<button id="reload-settings">Reload Settings</button>
+		</fieldset>
+	</form>
+	<div id="chord">
+		<div id="chordName"></div>
+		<div id="chordNotes"></div>
+	</div>
+	<div id="logs"></div>
+	<script type="text/javascript" src="./js/guitar-class.js"></script>
+	<script>
+		let wakeLock = null;
+		let midiIn, midiOut, midiOutStrum;
+		let builtInInstrument;
+		let useBuiltInInstrument = true;
+		let doSendSpecialNotes = false;
+		let useForwarder = false;
+		let useAllChannels = false;
+
+		let guitar, guitarStrings
+		let strumGuitarStrings = [];
+
+		function registerSpecialNotes() {
+			let specialNotes = {
+				mutedNote: {
+					trigger: parseInt($("#muted-note-trigger").val(), 10),
+					noteNumber: parseInt($("#muted-note").val(), 10),
+					name: "Muted Note"
+				},
+				silentStroke: {
+					trigger: parseInt($("#silent-stroke-trigger").val(), 10),
+					noteNumber: parseInt($("#silent-stroke").val(), 10),
+					name: "Silent Stroke"
+				}
+			}
+			guitar.registerSpecialNotes(specialNotes);
+		}
+
+		function log(msg) {
+			let divLog = $("#logs");
+			divLog.prepend(`<div>${msg}</div>`);
+		}
+		function prepareMidiDeviceList(devices, ioType) {
+			if (devices.length < 1) {
+				log("No ${ioType} devices detected.");
+			}
+			else {
+				let html = [];
+				devices.forEach((device, index) => {
+					html.push(`<option value="${device.name}">${device.name}</option>`);
+				});
+				html = html.join("");
+				$(`#midi-${ioType}`).html(html);
+				if (ioType == "output") {
+					$(`#midi-${ioType}-strum`).html(html);
+				}
+			}
+		}
+
+		async function initSoundFonts(listOfInstruments, selectedInstrumentIndex) {
+			MIDI.loadPlugin({
+				soundfontUrl: "./soundfont/",
+				instruments: listOfInstruments,
+				onprogress: function (state, progress) {
+					console.log(state, progress);
+				},
+				onsuccess: function () {
+					let selectedInstrumentName = listOfInstruments[selectedInstrumentIndex];
+					console.log("Selected Instrument", selectedInstrumentName);
+					var delay = 0; // play one note every quarter second
+					var velocity = 1; // how hard the note hits
+					// play the note
+					//MIDI.setVolume(0, 127);
+					let notes = guitar.chordMap["Cmaj"].notes;
+					for (let i = 0, c = 6; i < c; i++) {
+						MIDI.programChange(i, MIDI.GM.byName[selectedInstrumentName].number);
+						setTimeout(function () {
+							MIDI.noteOn(i, notes[i], velocity, 0);
+						}, i * 50);
+						setTimeout(function () {
+							MIDI.noteOff(i, notes[i], 0);
+						}, i * 50 + 1000);
+					}
+					builtInInstrument = MIDI;
+					MIDI.setEffects([
+						{
+							type: "Chorus",
+							rate: 1.5,
+							feedback: 0.2,
+							delay: 0.0045,
+							bypass: 0
+						}, {
+							type: "Delay",
+							feedback: 0.45, // 0 to 1+
+							delayTime: 250, // how many milliseconds should the wet signal be delayed? 
+							wetLevel: 0.5, // 0 to 1+
+							dryLevel: 1, // 0 to 1+
+							cutoff: 20, // cutoff frequency of the built in highpass-filter. 20 to 22050
+							bypass: 0
+						}
+					]);
+				}
+			});
+		}
+
+		async function onWebMidiEnabled() {
+			let listOfInstruments = [];
+			let instrumentSelectedIndex = 0;
+			$("#built-in-instruments option").each((i, el) => {
+				listOfInstruments.push(el.value);
+				if (el.selected === true) {
+					instrumentSelectedIndex = i;
+				}
+			});
+			initSoundFonts(listOfInstruments, instrumentSelectedIndex);
+
+			prepareMidiDeviceList(WebMidi.inputs, "input");
+			prepareMidiDeviceList(WebMidi.outputs, "output");
+
+			for (let i = 0, c = 6; i < c; i++) {
+				guitarStrings[i].registerPlayNoteOn(builtInPlayNoteOn);
+				guitarStrings[i].registerPlayNoteOff(builtInPlayNoteOff);
+			}
+		}
+
+
+		function initGuitar(settings) {
+			guitar = new Guitar(settings);
+			guitarStrings = [
+				new GuitarString(guitar, 0),
+				new GuitarString(guitar, 1),
+				new GuitarString(guitar, 2),
+				new GuitarString(guitar, 3),
+				new GuitarString(guitar, 4),
+				new GuitarString(guitar, 5)
+			];
+			guitar.guitarStrings = guitarStrings;
+			strumGuitarStrings = [];
+
+			function chordChangedHandler(chordName) {
+				$("#chordName").html(chordName);
+				$("#chordNotes").html(guitar.chordMap[chordName].keys.join(", "));
+			}
+			guitar.registerChordChanged(chordChangedHandler);
+		}
+		async function reloadSettings() {
+			let res = await fetch("./js/settings.txt?rand=" + new Date().valueOf());
+			let settings = await res.json();
+			guitar.reloadSettings(settings);
+		}
+
+		function setDefaultUI() {
+			$("#midi-input").val("INSTRUMENT1");
+			$("#midi-output").val("Virtual Instrument 1A");
+			$("#midi-output-strum").val("Virtual Instrument 1B");
+			document.getElementById("use-built-in-instrument").checked = false;
+			document.getElementById("send-special-notes").checked = true;
+		}
+		$(document).ready(async (e) => {
+			if ('wakeLock' in navigator) {
+				async function requestWakeLock() {
+					try {
+						wakeLock = await navigator.wakeLock.request();
+						wakeLock.addEventListener('release', () => {
+							console.log('Screen Wake Lock released:', wakeLock.released);
+						});
+						console.log('Screen Wake Lock released:', wakeLock.released);
+					} catch (err) {
+						console.error(`${err.name}, ${err.message}`);
+					}
+				}
+				await requestWakeLock();
+			}
+
+			let res = await fetch("./js/settings.txt");
+			let settings = await res.json();
+			console.log(settings);
+			initGuitar(settings);
+
+			WebMidi
+				.enable()
+				.then(() => {
+					onWebMidiEnabled();
+					setDefaultUI();
+					useBuiltInInstrument = document.getElementById("use-built-in-instrument").checked;
+					doSendSpecialNotes = document.getElementById("send-special-notes").checked;
+				})
+				.catch(err => alert(err));
+		});
+
+		function removeMidiInListener() {
+			if (midiIn) {
+				for (let i = 1, c = 17; i < c; i++) {
+					midiIn.channels[i].removeListener();
+				}
+			}
+		}
+		$("#initialize").click(async (e) => {
+			e.preventDefault();
+			removeMidiInListener();
+			for (let i = 0, c = 6; i < c; i++) {
+				MIDI.programChange(i, MIDI.GM.byName[$("#built-in-instruments").val()].number);
+			}
+
+			let selectedInput = $("#midi-input").val();
+			let selectedOuput = $("#midi-output").val();
+			let selectedOuputStrum = $("#midi-output-strum").val();
+
+			midiIn = WebMidi.getInputByName(selectedInput);
+			midiOut = WebMidi.getOutputByName(selectedOuput);
+			registerSpecialNotes();
+			useBuiltInInstrument = document.getElementById("use-built-in-instrument").checked;
+			for (let i = 0, c = 6; i < c; i++) {
+				if (useBuiltInInstrument === false) {
+					guitarStrings[i].registerPlayNoteOn(midiPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(midiPlayNoteOff);
+				}
+				else {
+					guitarStrings[i].registerPlayNoteOn(builtInPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(builtInPlayNoteOff);
+				}
+			}
+
+			if (useBuiltInInstrument === false) {
+				for (let i = 0, c = 6; i < c; i++) {
+					guitarStrings[i].registerPlayNoteOn(midiPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(midiPlayNoteOff);
+				}
+				guitar.registerSendSpecialNoteOn(midiSendSpecialNoteOn);
+				guitar.registerSendSpecialNoteOff(midiSendSpecialNoteOff);
+				if (selectedOuputStrum == selectedOuput) {
+					midiOutStrum = midiOut;
+				}
+				else {
+					midiOutStrum = WebMidi.getOutputByName(selectedOuputStrum);
+					strumGuitarStrings = [
+						new GuitarString(guitar, 0),
+						new GuitarString(guitar, 1),
+						new GuitarString(guitar, 2),
+						new GuitarString(guitar, 3),
+						new GuitarString(guitar, 4),
+						new GuitarString(guitar, 5)
+					];
+					for (let i = 0, c = 6; i < c; i++) {
+						strumGuitarStrings[i].registerPlayNoteOn(midiStrumNoteOn);
+						strumGuitarStrings[i].registerPlayNoteOff(midiStrumNoteOff);
+					}
+					guitar.strumGuitarStrings = strumGuitarStrings;
+				}
+			}
+			else {
+				for (let i = 0, c = 6; i < c; i++) {
+					guitarStrings[i].registerPlayNoteOn(builtInPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(builtInPlayNoteOff);
+				}
+				guitar.registerSendSpecialNoteOn(builtInSendSpecialNoteOn);
+				guitar.registerSendSpecialNoteOff(builtInSendSpecialNoteOff);
+				if (selectedOuputStrum == selectedOuput) {
+					midiOutStrum = midiOut;
+				}
+				else {
+					midiOutStrum = WebMidi.getOutputByName(selectedOuputStrum);
+					strumGuitarStrings = [
+						new GuitarString(guitar, 0),
+						new GuitarString(guitar, 1),
+						new GuitarString(guitar, 2),
+						new GuitarString(guitar, 3),
+						new GuitarString(guitar, 4),
+						new GuitarString(guitar, 5)
+					];
+					for (let i = 0, c = 6; i < c; i++) {
+						strumGuitarStrings[i].registerPlayNoteOn(builtInPlayNoteOn);
+						strumGuitarStrings[i].registerPlayNoteOff(builtInPlayNoteOff);
+					}
+					guitar.strumGuitarStrings = strumGuitarStrings;
+				}
+			}
+
+			let listeners = midiIn.getListeners("noteon");
+			for (let i = 0, c = listeners.length; i < c; i++) {
+				log("Removing noteon listener");
+				midiIn.removeListener("noteon", listeners[i]);
+			}
+			listeners = midiIn.getListeners("noteoff");
+			for (let i = 0, c = listeners.length; i < c; i++) {
+				log("Removing noteoff listener");
+				midiIn.removeListener("noteoff", listeners[i]);
+			}
+			midiIn.addListener("noteon", noteOnHandler);
+			midiIn.addListener("noteoff", noteOffHandler);
+			midiIn.addListener("channelaftertouch", e => {
+				if (guitar.lastPlayedString > -1) {
+					midiOut.sendChannelAftertouch(e.value, { channels: [guitar.lastPlayedString + 2] });
+					if (midiOut != midiOutStrum) {
+						midiOutStrum.sendChannelAftertouch(e.value, { channels: [guitar.lastPlayedString + 2] });
+					}
+				}
+			});
+			midiIn.addListener("keyaftertouch", e => {
+				//console.log("keyaftertouch: ", e);
+			});
+			midiIn.addListener("pitchbend", e => {
+				if (guitar.lastPlayedString > -1) {
+					midiOut.sendPitchBend(e.value, { channels: [guitar.lastPlayedString + 2] });
+					if (midiOut != midiOutStrum) {
+						midiOutStrum.sendPitchBend(e.value, { channels: [guitar.lastPlayedString + 2] });
+					}
+				}
+			});
+			midiIn.addListener("controlchange", e => {
+				if (guitar.lastPlayedString > -1) {
+					// midiOut.sendPitchBend(e.value, { channels: [guitar.lastPlayedString + 2] });
+					midiOut.sendControlChange(e.controller.number, e.rawValue, { channels: [guitar.lastPlayedString + 2] })
+					if (midiOut != midiOutStrum) {
+						// midiOutStrum.sendPitchBend(e.value, { channels: [guitar.lastPlayedString + 2] });
+						midiOutStrum.sendControlChange(e.controller.number, e.rawValue, { channels: [guitar.lastPlayedString + 2] })
+					}
+				}
+			});
+			log("Initialized");
+		});
+
+		$("#use-built-in-instrument").change((e) => {
+			useBuiltInInstrument = e.target.checked;
+			if (useBuiltInInstrument === false) {
+				guitar.registerSendSpecialNoteOn(midiSendSpecialNoteOn);
+				guitar.registerSendSpecialNoteOff(midiSendSpecialNoteOff);
+			}
+			else {
+				guitar.registerSendSpecialNoteOn(builtInSendSpecialNoteOn);
+				guitar.registerSendSpecialNoteOff(builtInSendSpecialNoteOff);
+			}
+			for (let i = 0, c = 6; i < c; i++) {
+				if (useBuiltInInstrument === false) {
+					guitarStrings[i].registerPlayNoteOn(midiPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(midiPlayNoteOff);
+				}
+				else {
+					guitarStrings[i].registerPlayNoteOn(builtInPlayNoteOn);
+					guitarStrings[i].registerPlayNoteOff(builtInPlayNoteOff);
+				}
+			}
+		});
+		$("#send-special-notes").change((e) => {
+			doSendSpecialNotes = e.target.checked;
+		});
+		$("#forwarder-toggle").click(async (e) => {
+			e.preventDefault();
+			if (useForwarder === true) {
+				$("#initialize").click();
+				midiIn.removeForwarder(midiForwarder);
+				midiForwarder = undefined;
+				$("#forwarder-toggle").html("Enable Forwarder");
+				useForwarder = false;
+			}
+			else {
+				removeMidiInListener();
+				midiForwarder = midiIn.addForwarder(midiOut);
+				$("#forwarder-toggle").html("Disable Forwarder");
+				useForwarder = true;
+			}
+		});
+		$("#one-channel-toggle").click(async (e) => {
+			e.preventDefault();
+			if (useAllChannels === true) {
+				useAllChannels = false;
+				$("#one-channel-toggle").html("Enable All Channels");
+			}
+			else {
+				useAllChannels = true;
+				$("#one-channel-toggle").html("Disable All Channels");
+			}
+		});
+		$("#reload-settings").click(async (e) => {
+			e.preventDefault();
+			reloadSettings();
+		});
+		$("#transpose").change(async (e) => {
+			e.preventDefault();
+			guitar.transpose = parseInt($("#transpose").val(), 10);
+		});
+
+		function noteOnHandler(e) {
+			let stringIndex = e.note.number - 120;
+			guitar.noteOnHandler(e.note.number, e.note.rawAttack, e.note.rawRelease);
+		}
+		function noteOffHandler(e) {
+			let stringIndex = e.note.number - 120;
+			guitar.noteOffHandler(e.note.number, e.note.rawAttack, e.note.rawRelease);
+		}
+
+		function builtInPlayNoteOn(noteToPlay, stringIndex, attack, release) {
+			//console.log("NOTE ON:", stringIndex, noteToPlay, attack, 0);
+			MIDI.noteOn(stringIndex, noteToPlay, attack, 0);
+		}
+		function builtInPlayNoteOff(noteToPlay, stringIndex, attack, release) {
+			//console.log("NOTE OFF:", stringIndex, noteToPlay, attack, 0);
+			MIDI.noteOff(stringIndex, noteToPlay, 0);
+		}
+		function builtInSendSpecialNoteOn(specialNote) {
+		}
+		function builtInSendSpecialNoteOff(specialNote) {
+		}
+
+		function midiPlayNoteOn(noteToPlay, stringIndex, attack, release) {
+			let newNote = new Note(noteToPlay, {
+				rawAttack: attack,
+				rawRelease: release
+			});
+			if (useAllChannels === true) {
+				midiOut.sendNoteOn(newNote);
+			}
+			else {
+				midiOut.sendNoteOn(newNote, { channels: [stringIndex + 2] });
+			}
+		}
+		function midiPlayNoteOff(noteToPlay, stringIndex, attack, release) {
+			if (useAllChannels === true) {
+				midiOut.sendNoteOff(noteToPlay);
+			}
+			else {
+				midiOut.sendNoteOff(noteToPlay, { channels: [stringIndex + 2] });
+			}
+		}
+		function midiStrumNoteOn(noteToPlay, stringIndex, attack, release) {
+			let newNote = new Note(noteToPlay, {
+				rawAttack: attack,
+				rawRelease: release
+			});
+			midiOutStrum.sendNoteOn(newNote, { channels: [stringIndex + 2] });
+		}
+		function midiStrumNoteOff(noteToPlay, stringIndex, attack, release) {
+			console.log("Note Off", noteToPlay, stringIndex);
+			midiOutStrum.sendNoteOff(noteToPlay, { channels: [stringIndex + 2] });
+		}
+		function midiSendSpecialNoteOn(specialNote) {
+			if (doSendSpecialNotes === true) {
+				let newNote = new Note(specialNote.noteNumber, { rawAttack: 1, rawRelease: 1 });
+				midiOut.sendNoteOn(newNote, { channels: [2, 3, 4, 5, 6, 7] });
+				if (midiOut != midiOutStrum) {
+					midiOutStrum.sendNoteOn(newNote, { channels: [2, 3, 4, 5, 6, 7] });
+				}
+			}
+			else {
+				switch (specialNote.name) {
+					case "Muted Note":
+					case "Silent Stroke":
+						midiOut.sendAllNotesOff({ channels: [2, 3, 4, 5, 6, 7] });
+						break;
+				}
+			}
+		}
+		function midiSendSpecialNoteOff(specialNote) {
+			if (doSendSpecialNotes === true) {
+				let newNote = new Note(specialNote.noteNumber, { rawAttack: 1, rawRelease: 1 });
+				midiOut.sendNoteOff(newNote, { channels: [2, 3, 4, 5, 6, 7] });
+				if (midiOut != midiOutStrum) {
+					midiOutStrum.sendNoteOff(newNote, { channels: [2, 3, 4, 5, 6, 7] });
+				}
+			}
+			else {
+				console.log("No Special Note", specialNote);
+			}
+		}
+
+		stringPlayNoteOn = builtInPlayNoteOn;
+		stringPlayNoteOff = builtInPlayNoteOff;
+
+		function onMidiEnabled() {
+			midiIn = WebMidi.getInputByName("INSTRUMENT1");
+			midiOut = WebMidi.getOutputByName("Virtual Instrument 1A");
+			midiIn.addListener("noteon", noteOnHandler);
+			midiIn.addListener("noteoff", noteOffHandler);
+			midiIn.addListener("channelaftertouch", (e) => {
+				if (guitar.lastPlayedStringIndex > -1) {
+					midiOut1.sendChannelAftertouch(e.value, { channels: [guitar.lastPlayedStringIndex + 2] });
+				}
+			});
+			midiIn.addListener("keyaftertouch", e => {
+				console.log("keyaftertouch: ", e);
+			});
+			midiIn.addListener("pitchbend", e => {
+				if (guitar.lastPlayedStringIndex > -1) {
+					midiOut1.sendPitchBend(e.value, { channels: [guitar.lastPlayedStringIndex + 2] });
+				}
+			});
+			midiIn.addListener("controlchange", e => {
+				if (guitar.lastPlayedStringIndex > -1) {
+					midiOut1.sendControlChange(e.controller.number, e.rawValue, { channels: [guitar.lastPlayedStringIndex + 2] });
+				}
+			});
+
+			for (let i = 0, c = 6; i < c; i++) {
+				guitarStrings[i].registerPlayNoteOn(stringPlayNoteOn);
+				guitarStrings[i].registerPlayNoteOff(stringPlayNoteOff);
+			}
+			registerSpecialNotes();
+		}
+
+		function init() {
+			MIDI.noteOn(1, 48, 60, 0);
+			return false;
+		}
+	</script>
+</body>
+
+</html>
